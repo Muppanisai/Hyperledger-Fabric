@@ -1,0 +1,48 @@
+'use strict';
+
+const { Gateway, Wallets } = require('fabric-network');
+const path = require('path');
+const fs = require('fs');
+
+async function main() {
+    try {
+        // Load connection profile
+        const ccpPath = path.resolve(__dirname, '..', 'connection-profile.json');
+        const ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
+
+        // Create wallet for managing identities
+        const walletPath = path.join(process.cwd(), 'wallet');
+        const wallet = await Wallets.newFileSystemWallet(walletPath);
+
+        // Check to see if we've already enrolled the user
+        const identity = await wallet.get('appUser');
+        if (!identity) {
+            console.log('An identity for the user "appUser" does not exist in the wallet');
+            return;
+        }
+
+        // Create a new gateway for connecting to peer node
+        const gateway = new Gateway();
+        await gateway.connect(ccp, { wallet, identity: 'appUser', discovery: { enabled: true, asLocalhost: true } });
+
+        // Get the network and contract
+        const network = await gateway.getNetwork('mychannel');
+        const contract = network.getContract('assetmanagement');
+
+        // Submit the CreateAsset transaction
+        await contract.submitTransaction('CreateAsset', 'D001', '1234567890', '1234', '1000.0', 'active');
+        console.log('Asset created successfully');
+
+        // Query the asset
+        const result = await contract.evaluateTransaction('QueryAsset', '1234567890');
+        console.log(`Asset details: ${result.toString()}`);
+
+        // Close gateway connection
+        await gateway.disconnect();
+
+    } catch (error) {
+        console.error(`Failed to execute transaction: ${error}`);
+    }
+}
+
+main();
